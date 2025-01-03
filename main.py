@@ -1,53 +1,47 @@
-from enum import Enum
+from fastapi import Depends, FastAPI, Query, HTTPException
+from sqlmodel import Session, SQLModel, select
 
-
-from fastapi import FastAPI
+from database import Hero, engine, get_session
 
 app = FastAPI()
 
 
-fake_items_db = [{"item_name": "Foo"}, {"item_name": "Bar"}, {"item_name": "Baz"}]
+@app.on_event("startup")
+def on_startup():
+    SQLModel.metadata.create_all(engine)
 
 
-@app.get("/items/")
-async def read_item(skip: int = 0, limit: int = 10):
-    fake_items_db[skip : skip + limit]
-    return fake_items_db[skip : skip + limit]
+@app.post("/heroes/")
+def create_hero(hero: Hero, session: Session = Depends(get_session)) -> Hero:
+    session.add(hero)
+    session.commit()
+    session.refresh(hero)
+    return hero
 
 
-# enums
-class ModelName(str, Enum):
-    alexnet = "alexnet"
-    resnet = "resnet"
-    lenet = "lenet"
+@app.get("/heroes/")
+def read_heroes(
+    session: Session = Depends(get_session),
+    offset: int = 0,
+    limit: int = Query(default=100, le=100),
+) -> list[Hero]:
+    heroes = session.exec(select(Hero).offset(offset).limit(limit)).all()
+    return heroes
 
 
-@app.get("/models/{model_name}")
-async def get_model(model_name: ModelName):
-    if model_name is ModelName.alexnet:
-        return {"model_name": model_name, "message": "Deep Learning FTW!"}
-
-    if model_name.value == "lenet":
-        return {"model_name": model_name, "message": "LeCNN all the images"}
-
-    return {"model_name": model_name, "message": "Have some residuals"}
+@app.get("/heroes/{hero_id}")
+def read_hero(hero_id: int, session: Session = Depends(get_session)) -> Hero:
+    hero = session.get(Hero, hero_id)
+    if not hero:
+        raise HTTPException(status_code=404, detail="Hero not found")
+    return hero
 
 
-@app.get("/")
-async def root():
-    return {"message": "Hello World"}
-
-
-@app.get("/items/{item_id}")
-async def read_item(item_id: int):
-    return {"item_id": item_id}
-
-
-@app.get("/users")
-async def read_users():
-    return ["Rick", "Morty"]
-
-
-@app.get("/files/{file_path:path}")
-async def read_file(file_path: str):
-    return {"file_path": file_path}
+@app.delete("/heroes/{hero_id}")
+def delete_hero(hero_id: int, session: Session = Depends(get_session)):
+    hero = session.get(Hero, hero_id)
+    if not hero:
+        raise HTTPException(status_code=404, detail="Hero not found")
+    session.delete(hero)
+    session.commit()
+    return {"ok": True}
