@@ -17,6 +17,7 @@ async function bootstrap() {
   // Create the Swagger document and set up Swagger UI route
   const document = SwaggerModule.createDocument(app, options);
   SwaggerModule.setup('/docs', app, document);
+  // todo micro service?
 
   await app.listen(3000);
 }
